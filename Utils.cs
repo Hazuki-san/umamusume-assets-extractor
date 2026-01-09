@@ -10,19 +10,19 @@ namespace Umamusume_Assets_Extractor
 {
     public class Utils
     {
-        // アプリ関連の設定
+        // App settings
         public static string appName = "Umamusume Assets Extractor";
         public static bool verboseMode = false;
         public static bool isDumpTargetFile = false;
         public static int willBeCopiedFilesAmount = 0;
         public static int copiedFilesAmount = 0;
         public static int skippedFilesAmount = 0;
-        // ディレクトリ関連の設定
+        // Directory settings
         public static string extractFolderName = "Contents";
         public static string gameDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) + @"Low\Cygames\umamusume";
         public static string metaPath = gameDataPath + @"\meta";
         public static string datPath = gameDataPath + @"\dat";
-        // データベース関連の設定
+        // Database settings
         public static string filePathColumn = "n";
         public static string sourceFileNameColumn = "h";
         public static string isDownloadedColumn = "s";
@@ -133,7 +133,7 @@ namespace Umamusume_Assets_Extractor
                 return;
 
             var sql = $"SELECT {filePathColumn}, {sourceFileNameColumn}, {encryptionKeyColumn} {searchCriteria} {GetRefinementString(dumpTarget)}";
-            Console.WriteLine("ファイルのコピーを開始しました。");
+            Console.WriteLine("Starting file copy...");
             encryptionKeys.Clear();  // Clear any previous keys
 
             if (region == Region.Global)
@@ -191,7 +191,7 @@ namespace Umamusume_Assets_Extractor
                 }
             }
 
-            Console.WriteLine($"完了しました。 トータルでコピーしたファイル: {copiedFilesAmount}");
+            Console.WriteLine($"Completed. Total files copied: {copiedFilesAmount}");
 
             // Export encryption keys for Global region
             if (region == Region.Global && encryptionKeys.Count > 0)
@@ -267,7 +267,7 @@ namespace Umamusume_Assets_Extractor
 
             if (!fileDir.Split("/").Last().Contains(dumpTarget) && isDumpTargetFile)
             {
-                PrintLogIfVerboseModeIsOn($"{fileDir}は名前に\"{dumpTarget}\"が含まれていないため、スキップしました。");
+                PrintLogIfVerboseModeIsOn($"{fileDir} does not contain \"{dumpTarget}\" in name, skipping.");
                 willBeCopiedFilesAmount--;
                 skippedFilesAmount++;
                 return;
@@ -277,13 +277,13 @@ namespace Umamusume_Assets_Extractor
             {
                 if (FileCompare(sourceFileDir, copyFilePath))
                 {
-                    PrintLogIfVerboseModeIsOn($"{fileDir}は既にコピーされているのでスキップします。");
+                    PrintLogIfVerboseModeIsOn($"{fileDir} already copied, skipping.");
                     willBeCopiedFilesAmount--;
                     skippedFilesAmount++;
                     return;
                 }
 
-                PrintLogIfVerboseModeIsOn($"{fileDir}はコピーされていますが、内容が異なるので削除してコピーし直します。");
+                PrintLogIfVerboseModeIsOn($"{fileDir} exists but differs, replacing.");
                 File.Delete(copyFilePath);
             }
 
@@ -296,7 +296,7 @@ namespace Umamusume_Assets_Extractor
             copiedFilesAmount++;
         }
 
-        // FileCompare関数はMicrosoftさんの"Visual C# を使用してFile-Compare関数を作成する"からいただきました。
+        // FileCompare function adapted from Microsoft's "Create a File-Compare function using Visual C#".
 
         // This method accepts two strings the represent two files to
         // compare. A return value of 0 indicates that the contents of the files
@@ -354,7 +354,7 @@ namespace Umamusume_Assets_Extractor
         }
 
         /// <summary>
-        /// verboseModeがオンの時のみログを表示します。表示した場合はtrueを、しなかった場合はfalseを返します。
+        /// Prints log only if verbose mode is enabled. Returns true if printed, false otherwise.
         /// </summary>
         public static bool PrintLogIfVerboseModeIsOn(string log)
         {
@@ -366,9 +366,9 @@ namespace Umamusume_Assets_Extractor
         }
 
         /// <summary>
-        /// コンソールのタイトルを更新します。
+        /// Updates the console title.
         /// </summary>
-        /// <param name="status">copying:コピー中 done:完了 空欄:アプリ名のみ</param>
+        /// <param name="status">copying: in progress, done: completed, empty: app name only</param>
         public static void UpdateConsoleTitle(string status = "")
         {
             switch(status)
@@ -377,13 +377,13 @@ namespace Umamusume_Assets_Extractor
                 {
                     int donePer = (int)(copiedFilesAmount / (float)willBeCopiedFilesAmount * 100);
 
-                    Console.Title = $"{appName} - 残り {copiedFilesAmount} / {willBeCopiedFilesAmount} - {donePer}%完了 - スキップされたファイル: {skippedFilesAmount}";
+                    Console.Title = $"{appName} - Remaining {copiedFilesAmount} / {willBeCopiedFilesAmount} - {donePer}% done - Skipped: {skippedFilesAmount}";
                     break;
                 }
 
                 case "done":
                 {
-                    Console.Title = $"{appName} - 完了 {copiedFilesAmount} / {willBeCopiedFilesAmount} - 100%完了 - スキップされたファイル: {skippedFilesAmount}";
+                    Console.Title = $"{appName} - Done {copiedFilesAmount} / {willBeCopiedFilesAmount} - 100% complete - Skipped: {skippedFilesAmount}";
                     break;
                 }
 
@@ -397,7 +397,7 @@ namespace Umamusume_Assets_Extractor
 
         public static void PrintFolders()
         {
-            Console.WriteLine("フォルダ一覧:");
+            Console.WriteLine("Available folders:");
 
             using (var connection = new SqliteConnection($"Data Source = {metaPath}"))
             {
