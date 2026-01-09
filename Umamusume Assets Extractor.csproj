@@ -22,4 +22,8 @@
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.4" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="sqlite3mc_x64.dll" CopyToOutputDirectory="PreserveNewest" Condition="Exists('sqlite3mc_x64.dll')" />
+  </ItemGroup>
+
 </Project>

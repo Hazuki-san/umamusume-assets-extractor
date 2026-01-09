@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace Umamusume_Assets_Extractor
@@ -26,35 +27,97 @@ namespace Umamusume_Assets_Extractor
         public static string sourceFileNameColumn = "h";
         public static string isDownloadedColumn = "s";
         public static string fileTypeColumn = "m";
+        public static string encryptionKeyColumn = "e";  // Per-entry encryption key for Global
         public static string excludeFileTypeWord = "manifest";
         public static string tableName = "a";
         public static string searchCriteria = @$"
                                                     FROM {tableName}
                                                     WHERE {isDownloadedColumn} = 1
-                                                    AND {fileTypeColumn} NOT LIKE ""%{excludeFileTypeWord}%""
+                                                    AND {fileTypeColumn} NOT LIKE '%{excludeFileTypeWord}%'
                                                 ";
+
+        // Region setting
+        public static Region region = Region.Jp;
+
+        // Per-entry encryption keys dictionary (filepath -> key)
+        public static Dictionary<string, long> encryptionKeys = new Dictionary<string, long>();
+
+        // Encryption keys (from UmaViewer)
+        public static byte[] DBBaseKey = new byte[]
+        {
+            0xF1, 0x70, 0xCE, 0xA4, 0xDF, 0xCE, 0xA3, 0xE1,
+            0xA5, 0xD8, 0xC7, 0x0B, 0xD1, 0x00, 0x00, 0x00
+        };
+
+        public static byte[] DBKey = new byte[]
+        {
+            0x6D, 0x5B, 0x65, 0x33, 0x63, 0x36, 0x63, 0x25,
+            0x54, 0x71, 0x2D, 0x73, 0x50, 0x53, 0x63, 0x38,
+            0x6D, 0x34, 0x37, 0x7B, 0x35, 0x63, 0x70, 0x23,
+            0x37, 0x34, 0x53, 0x29, 0x73, 0x43, 0x36, 0x33
+        };
+
+        public static byte[] GlobalDBKey = new byte[]
+        {
+            0x56, 0x63, 0x6B, 0x63, 0x42, 0x72, 0x37, 0x76,
+            0x65, 0x70, 0x41, 0x62
+        };
+
+        public static byte[] GenFinalKey(byte[] key)
+        {
+            var result = (byte[])key.Clone();
+            for (int i = 0; i < result.Length; i++)
+            {
+                result[i] = (byte)(result[i] ^ DBBaseKey[i % 13]);
+            }
+            return result;
+        }
 
         public static int CalucateWillBeCopiedFilesAmount(string dumpTarget = "")
         {
             var amount = 0;
+            var sql = $"SELECT count(*) {searchCriteria} {GetRefinementString(dumpTarget)}";
 
-            using (var connection = new SqliteConnection($"Data Source={metaPath}"))
+            if (region == Region.Global)
             {
-                connection.Open();
-
-                var command = connection.CreateCommand();
-                command.CommandText =
-                @$"
-                    SELECT count(*)
-                    {searchCriteria}
-                    {GetRefinementString(dumpTarget)}
-                ";
-
-                using (var reader = command.ExecuteReader())
+                // Use encrypted database access for Global
+                var dbKey = region == Region.Global ? GlobalDBKey : DBKey;
+                var finalKey = GenFinalKey(dbKey);
+                IntPtr db = IntPtr.Zero;
+                try
                 {
-                    while (reader.Read())
+                    db = Sqlite3MC.Open(metaPath);
+                    Sqlite3MC.MC_Config(db, "cipher", 3); // cipher index
+                    int rcKey = Sqlite3MC.Key_SetBytes(db, finalKey);
+                    if (rcKey != Sqlite3MC.SQLITE_OK)
+                        throw new InvalidOperationException($"sqlite3_key failed: {Sqlite3MC.GetErrMsg(db)}");
+                    if (!Sqlite3MC.ValidateReadable(db, out string? err))
+                        throw new InvalidOperationException($"DB validation failed: {err}");
+
+                    Sqlite3MC.ForEachRow(sql, db, (stmt) =>
                     {
-                        amount = reader.GetInt32(0);
+                        amount = Sqlite3MC.ColumnInt(stmt, 0);
+                    });
+                }
+                finally
+                {
+                    if (db != IntPtr.Zero) Sqlite3MC.Close(db);
+                }
+            }
+            else
+            {
+                // Use standard SqliteConnection for Japan
+                using (var connection = new SqliteConnection($"Data Source={metaPath}"))
+                {
+                    connection.Open();
+                    var command = connection.CreateCommand();
+                    command.CommandText = sql;
+                    using (var reader = command.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            amount = reader.GetInt32(0);
+                        }
                     }
                 }
             }
@@ -69,65 +132,168 @@ namespace Umamusume_Assets_Extractor
             if (willBeCopiedFilesAmount == 0)
                 return;
 
-            using (var connection = new SqliteConnection($"Data Source={metaPath}"))
+            var sql = $"SELECT {filePathColumn}, {sourceFileNameColumn}, {encryptionKeyColumn} {searchCriteria} {GetRefinementString(dumpTarget)}";
+            Console.WriteLine("ファイルのコピーを開始しました。");
+            encryptionKeys.Clear();  // Clear any previous keys
+
+            if (region == Region.Global)
             {
-                connection.Open();
-
-                var command = connection.CreateCommand();
-                command.CommandText =
-                $@"
-                    SELECT {filePathColumn}, {sourceFileNameColumn}
-                    {searchCriteria}
-                    {GetRefinementString(dumpTarget)}
-                ";
-
-                using (var reader = command.ExecuteReader())
+                // Use encrypted database access for Global
+                var dbKey = GlobalDBKey;
+                var finalKey = GenFinalKey(dbKey);
+                IntPtr db = IntPtr.Zero;
+                try
                 {
-                    Console.WriteLine("ファイルのコピーを開始しました。");
+                    db = Sqlite3MC.Open(metaPath);
+                    Sqlite3MC.MC_Config(db, "cipher", 3);
+                    int rcKey = Sqlite3MC.Key_SetBytes(db, finalKey);
+                    if (rcKey != Sqlite3MC.SQLITE_OK)
+                        throw new InvalidOperationException($"sqlite3_key failed: {Sqlite3MC.GetErrMsg(db)}");
+                    if (!Sqlite3MC.ValidateReadable(db, out string? err))
+                        throw new InvalidOperationException($"DB validation failed: {err}");
 
-                    while (reader.Read())
+                    Sqlite3MC.ForEachRow(sql, db, (stmt) =>
                     {
-                        UpdateConsoleTitle("copying");
-
-                        var fileDir = reader.GetString(0); // 代入される例:"sound/v/snd_voi_race_104602.acb"
-                        var sourceFileName = reader.GetString(1);     // 代入される例:"EK5FIH4TY23JRVW2XNTCNCEQGSZSRFPT"
-                        var sourceFileDir = datPath + "\\" + sourceFileName.Substring(0, 2) + "\\" + sourceFileName; // 代入される例:"C:\Users\ユーザー名\AppData\LocalLow\Cygames\umamusume\dat\EK\EK5FIH4TY23JRVW2XNTCNCEQGSZSRFPT"
-                        var copyFilePath = Path.Combine(extractFolderName, fileDir);
-
-                        if (!fileDir.Split("/").Last().Contains(dumpTarget) && isDumpTargetFile) // ファイルをダンプするモードでsql側で名前を検索するとき、"sound/v/snd_voi_race_104602.acb"からファイル名の"snd_voi_race_104602.acb"だけを
-                        {                                                                        // 抜き出すということをどうやるのかわからなかったので、一旦ファイルパスごと検索して、そしてここでファイル名のみ抜き出して検索するということをしています。
-                            PrintLogIfVerboseModeIsOn($"{fileDir}は名前に\"{dumpTarget}\"が含まれていないため、スキップしました。");
-                            willBeCopiedFilesAmount--;
-                            skippedFilesAmount++;
-                            continue;
-                        }
-
-                        if (File.Exists(copyFilePath)) // もしコピーしようとしたファイルが存在していたらそのファイルがコピー元のファイルと一致しているか確認し、一致している場合はスキップして、一致していない場合は削除して続行します
+                        var fileDir = Sqlite3MC.ColumnText(stmt, 0);
+                        var sourceFileName = Sqlite3MC.ColumnText(stmt, 1);
+                        var encKey = Sqlite3MC.ColumnInt64(stmt, 2);
+                        if (fileDir != null && sourceFileName != null)
                         {
-                            if (FileCompare(sourceFileDir, copyFilePath))
-                            {
-                                PrintLogIfVerboseModeIsOn($"{fileDir}は既にコピーされているのでスキップします。");
-                                willBeCopiedFilesAmount--;
-                                skippedFilesAmount++;
-                                continue;
-                            }
-
-                            PrintLogIfVerboseModeIsOn($"{fileDir}はコピーされていますが、内容が異なるので削除してコピーし直します。");
-                            File.Delete(copyFilePath);
+                            ProcessFileCopy(fileDir, sourceFileName, dumpTarget);
+                            if (encKey != 0)
+                                encryptionKeys[fileDir] = encKey;
                         }
+                    });
+                }
+                finally
+                {
+                    if (db != IntPtr.Zero) Sqlite3MC.Close(db);
+                }
+            }
+            else
+            {
+                // Use standard SqliteConnection for Japan
+                using (var connection = new SqliteConnection($"Data Source={metaPath}"))
+                {
+                    connection.Open();
+                    var command = connection.CreateCommand();
+                    command.CommandText = sql;
 
-                        PrintLogIfVerboseModeIsOn($"{sourceFileName} -> {fileDir}");
-
-                        Directory.CreateDirectory(Path.Combine(extractFolderName, String.Join("\\", fileDir.Split("/").SkipLast(1)))); // ディレクトリを作成してパスをextractDirに格納
-
-                        File.Copy(sourceFileDir, copyFilePath); // ソースファイルを保存先にコピー
-
-                        copiedFilesAmount++;
+                    using (var reader = command.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            var fileDir = reader.GetString(0);
+                            var sourceFileName = reader.GetString(1);
+                            ProcessFileCopy(fileDir, sourceFileName, dumpTarget);
+                        }
                     }
                 }
-
-                Console.WriteLine($"完了しました。 トータルでコピーしたファイル: {copiedFilesAmount}");
             }
+
+            Console.WriteLine($"完了しました。 トータルでコピーしたファイル: {copiedFilesAmount}");
+
+            // Export encryption keys for Global region
+            if (region == Region.Global && encryptionKeys.Count > 0)
+            {
+                var keysPath = Path.Combine(extractFolderName, "keys.json");
+                var options = new JsonSerializerOptions { WriteIndented = true };
+                File.WriteAllText(keysPath, JsonSerializer.Serialize(encryptionKeys, options));
+                Console.WriteLine($"Exported {encryptionKeys.Count} encryption keys to {keysPath}");
+            }
+        }
+
+        /// <summary>
+        /// Export all encryption keys from meta.db without copying any files.
+        /// Much faster than full extraction - only reads the database.
+        /// </summary>
+        public static void ExportKeysOnly(string outputPath = "keys.json")
+        {
+            if (region != Region.Global)
+            {
+                Console.WriteLine("Keys export is only needed for Global region.");
+                return;
+            }
+
+            Console.WriteLine("Reading encryption keys from meta.db...");
+            encryptionKeys.Clear();
+
+            var sql = $"SELECT {filePathColumn}, {encryptionKeyColumn} FROM {tableName} WHERE {encryptionKeyColumn} != 0";
+            
+            var dbKey = GlobalDBKey;
+            var finalKey = GenFinalKey(dbKey);
+            IntPtr db = IntPtr.Zero;
+            try
+            {
+                db = Sqlite3MC.Open(metaPath);
+                Sqlite3MC.MC_Config(db, "cipher", 3);
+                int rcKey = Sqlite3MC.Key_SetBytes(db, finalKey);
+                if (rcKey != Sqlite3MC.SQLITE_OK)
+                    throw new InvalidOperationException($"sqlite3_key failed: {Sqlite3MC.GetErrMsg(db)}");
+                if (!Sqlite3MC.ValidateReadable(db, out string? err))
+                    throw new InvalidOperationException($"DB validation failed: {err}");
+
+                Sqlite3MC.ForEachRow(sql, db, (stmt) =>
+                {
+                    var fileDir = Sqlite3MC.ColumnText(stmt, 0);
+                    var encKey = Sqlite3MC.ColumnInt64(stmt, 1);
+                    if (fileDir != null && encKey != 0)
+                        encryptionKeys[fileDir] = encKey;
+                });
+            }
+            finally
+            {
+                if (db != IntPtr.Zero) Sqlite3MC.Close(db);
+            }
+
+            if (encryptionKeys.Count > 0)
+            {
+                var options = new JsonSerializerOptions { WriteIndented = true };
+                File.WriteAllText(outputPath, JsonSerializer.Serialize(encryptionKeys, options));
+                Console.WriteLine($"Exported {encryptionKeys.Count} encryption keys to {outputPath}");
+            }
+            else
+            {
+                Console.WriteLine("No encryption keys found in database.");
+            }
+        }
+
+        private static void ProcessFileCopy(string fileDir, string sourceFileName, string dumpTarget)
+        {
+            UpdateConsoleTitle("copying");
+
+            var sourceFileDir = datPath + "\\" + sourceFileName.Substring(0, 2) + "\\" + sourceFileName;
+            var copyFilePath = Path.Combine(extractFolderName, fileDir);
+
+            if (!fileDir.Split("/").Last().Contains(dumpTarget) && isDumpTargetFile)
+            {
+                PrintLogIfVerboseModeIsOn($"{fileDir}は名前に\"{dumpTarget}\"が含まれていないため、スキップしました。");
+                willBeCopiedFilesAmount--;
+                skippedFilesAmount++;
+                return;
+            }
+
+            if (File.Exists(copyFilePath))
+            {
+                if (FileCompare(sourceFileDir, copyFilePath))
+                {
+                    PrintLogIfVerboseModeIsOn($"{fileDir}は既にコピーされているのでスキップします。");
+                    willBeCopiedFilesAmount--;
+                    skippedFilesAmount++;
+                    return;
+                }
+
+                PrintLogIfVerboseModeIsOn($"{fileDir}はコピーされていますが、内容が異なるので削除してコピーし直します。");
+                File.Delete(copyFilePath);
+            }
+
+            PrintLogIfVerboseModeIsOn($"{sourceFileName} -> {fileDir}");
+
+            Directory.CreateDirectory(Path.Combine(extractFolderName, String.Join("\\", fileDir.Split("/").SkipLast(1))));
+
+            File.Copy(sourceFileDir, copyFilePath);
+
+            copiedFilesAmount++;
         }
 
         // FileCompare関数はMicrosoftさんの"Visual C# を使用してFile-Compare関数を作成する"からいただきました。
@@ -241,7 +407,7 @@ namespace Umamusume_Assets_Extractor
                 command.CommandText = $@"
                                             SELECT {filePathColumn}
                                             FROM {tableName}
-                                            WHERE {fileTypeColumn} = ""manifest""
+                                            WHERE {fileTypeColumn} = 'manifest'
                                         ";
 
                 using (var reader = command.ExecuteReader())
@@ -260,14 +426,20 @@ namespace Umamusume_Assets_Extractor
             if (dumpTarget != "")
                 if (isDumpTargetFile)
                     refinementString += @$"
-                                                    AND {filePathColumn} LIKE ""%{dumpTarget}%""
+                                                    AND {filePathColumn} LIKE '%{dumpTarget}%'
                                                ";
                 else
                     refinementString += @$"
-                                                    AND {filePathColumn} LIKE ""{dumpTarget}/%""
+                                                    AND {filePathColumn} LIKE '{dumpTarget}/%'
                                                ";
 
             return refinementString;
         }
+    }
+
+    public enum Region
+    {
+        Jp,
+        Global
     }
 }
