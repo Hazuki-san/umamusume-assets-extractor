@@ -24,7 +24,7 @@ namespace Umamusume_Assets_Extractor
         public static string datPath = gameDataPath + @"\dat";
 
         /// <summary>
-        /// Get all available game data paths
+        /// Get all available game data paths (only includes paths with meta database)
         /// </summary>
         public static List<(string path, string name, bool needsRegionPrompt)> GetAllGamePaths()
         {
@@ -32,17 +32,17 @@ namespace Umamusume_Assets_Extractor
 
             // Steam JP path (only JP Steam has Persistent in Steam folder)
             string steamJpPath = @"C:\Program Files (x86)\Steam\steamapps\common\UmamusumePrettyDerby_Jpn\UmamusumePrettyDerby_Jpn_Data\Persistent";
-            if (Directory.Exists(steamJpPath))
+            if (File.Exists(Path.Combine(steamJpPath, "meta")))
                 paths.Add((steamJpPath, "Japan (Steam)", false));
 
             // Standard AppData path - shared by Global Steam and old DMM Japan
             string standardPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) + @"Low\Cygames\umamusume";
-            if (Directory.Exists(standardPath))
+            if (File.Exists(Path.Combine(standardPath, "meta")))
                 paths.Add((standardPath, "AppData (Global/DMM shared)", true));
 
             // New DMM path (post-9/24 update) - in user folder, not AppData!
             string newDmmPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + @"\Umamusume\umamusume_Data\Persistent";
-            if (Directory.Exists(newDmmPath))
+            if (File.Exists(Path.Combine(newDmmPath, "meta")))
                 paths.Add((newDmmPath, "Japan (DMM)", false));
 
             return paths;
