@@ -1,73 +1,61 @@
-# Umamusume-Assets-Extractor
-ウマ娘のアセットファイルをダンプします (datフォルダにある英語の羅列のファイルに本来の名前を付けてコピーします)
+# Umamusume Assets Extractor
 
-## 何をする？
-ウマ娘のアセットファイルは、そのまま置いてあるわけではなく、英語の羅列のファイルになっています。
+Extracts asset files from Umamusume Pretty Derby (copies files from the dat folder with their original names).
 
-例えば、うまぴょい伝説の音楽ファイルの場合、
+## Features
+
+- **Auto-detect game installation** - Automatically finds Japan Steam, Japan DMM, and Global Steam installations
+- **Encrypted database support** - Works with both encrypted and unencrypted meta.db files
+- **Export encryption keys** - Exports per-file encryption keys to `keys.json` for asset decryption
+- **Folder/File dump modes** - Extract specific folders or search for files by name
+
+## What does it do?
+
+Umamusume stores asset files with hashed names in the `dat` folder:
 
 ![image](https://user-images.githubusercontent.com/90076182/186933969-5f3a6ca7-61cc-481d-838f-8528789ee180.png)
 
-sound/l/1001/snd_bgm_live_1001_oke_01.awbですが、実際は
+For example, `sound/l/1001/snd_bgm_live_1001_oke_01.awb` is actually stored as:
 
 ![image](https://user-images.githubusercontent.com/90076182/186935145-6c28ef28-6d16-40c3-8bc2-e32ec7bc99a4.png)
 
-こんな感じに保存されています。
-
-もし音楽ファイルを取り出したいときは、metaというデータベースを見て、取り出したいファイルに対応している英語の羅列のファイルを探して、データベースに書いてある本来の名前にしてと面倒くさいことをしないといけないので、
-
-この工程を全自動でやってくれるアプリを作りました。
+This tool reads the `meta` database and copies files with their original names:
 
 ![image](https://user-images.githubusercontent.com/90076182/186937978-bc7c62ba-1fc0-4f5a-9aa2-bb5e268610ce.png)
 
-## 使い方
+## Download
 
-### ダウンロード
-ダウンロードはこのサイトの右側にあるReleasesをクリックして最新のリリースをダウンロードしてください。
+Download the latest release from the Releases section:
 
 ![image](https://user-images.githubusercontent.com/90076182/187061141-98daf275-ddd1-457d-9bba-2bdd649139fc.png)
 
+## Usage
 
-### アプリの使い方
-1. 起動するとログを表示するか聞かれるので、お好きなほうを選んでください。(ログを表示すると少しコピー速度が低下します)
+1. **Select installation** - If multiple installations are detected, choose which one to use
+2. **Select region** - For shared paths (AppData), choose between Global or Japan
+3. **Select mode**:
+   - Extract files (copies files + exports keys.json)
+   - Export keys only (fast - just creates keys.json)
+4. **Enable logs** (optional) - Show detailed progress in console
+5. **Choose dump mode**:
+   - Folder dump: Extract a specific folder (e.g., `sound` for all audio files)
+   - File dump: Extract files containing a specific string (e.g., `chr1032` for Agnes Tachyon)
+6. **Enter target** - Specify folder/file name, or leave empty to dump everything
+   - Type `list` to see available folders
 
-2. モードを選択してください。フォルダをコピーするモードは指定された名前のフォルダをコピーします。(例:soundを指定するとsoundフォルダをコピーします)
+## Notes
 
-ファイルをコピーするモードは、指定された文字列がファイル名に含まれているファイルをコピーします。(例:chr1032と入力するとアグネスタキオンに関するファイルがすべてコピーされます)
+### Files must be downloaded in-game
+Only downloaded assets can be extracted. If you can't find specific files, try doing a bulk download in the game first.
 
-3. 先ほど指定したモードにしたがってフォルダ名かファイル名に含まれる文字列を指定してください。
+## Requirements
 
-4. 完了までお待ちください。完了した際、エクスプローラーでコピーしたフォルダを表示するか聞かれるので、お好きなほうを選んでください。
-
-## 注意
-### ダウンロードされているかについて
-ダウンロードされていないファイルはダンプできません。
-
-(例:BLOW my GALEを一回も見たことがない場合はBLOW my GALEの音楽ファイルをダンプできない)
-
-もし自分が見たいファイルが見つからなかった場合はウマ娘で一括ダウンロードしてからダンプしてみてください。
-
-
-### IDについて
-IDを知っておくと自分が欲しいファイルが簡単に見つけられます。
-
-例えば、ライブの音楽ファイルは"sound/l/ライブID/snd_bgm_live_ライブID_oke_01.awb"に保存されています。
-
-BLOW my GALEのライブIDは1048なので、BLOW my GALEの音楽ファイルは"sound/l/1048/snd_bgm_live_1048_oke_01.awb"に保存されているということになります。
-
-もしIDがわからない場合、umamusume-localifyの作者さんが作ったものを改造させてもらったものがあるので、使ってください。
-
-https://github.com/Endergreen12/Umamusume-ID-Dumper
-
-このアプリは、キャラID、衣装ID、ライブIDそしてそれに対応するキャラやライブの名前が書いてあるテキストファイルを生成してくれます。
-
-## 古いバージョンの実行には.NET Runtimeが必要です
-自己完結型に変更したので最新のリリースでは必要ありません。
-
-https://dotnet.microsoft.com/ja-jp/download/dotnet/7.0
-
-上のサイトを開いて、.NET Runtime という欄のところからお使いのOSと
-
-アーキテクチャにあっているものをダウンロードしてインストールしてください。
+Requires .NET 7.0 Runtime: https://dotnet.microsoft.com/download/dotnet/7.0
 
 ![image](https://user-images.githubusercontent.com/90076182/229263290-757a40f5-65cb-4140-84d8-0b13a2c8e448.png)
+
+## Credits
+
+- Original tool by [Endergreen12](https://github.com/Endergreen12)
+- Path detection from [mori2163](https://github.com/mori2163/umamusume-assets-extractor)
+- Encrypted database support from [UmaViewer](https://github.com/katboi01/UmaViewer)
