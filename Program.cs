@@ -10,7 +10,77 @@ Console.WriteLine("If you can't find the files you want, please perform a bulk d
 Console.WriteLine($"Extracted files will be saved to the '{extractFolderName}' folder.");
 Console.WriteLine();
 
-// Check if database exists
+// Check for available game installations
+var availablePaths = GetAllGamePaths();
+bool needsRegionPrompt = false;
+
+if (availablePaths.Count == 0)
+{
+    Console.WriteLine("Error: No game installation found automatically.");
+    Console.WriteLine();
+
+    bool pathSet = false;
+    while (!pathSet)
+    {
+        Console.WriteLine("Please enter the game data folder path manually.");
+        Console.WriteLine(@"(e.g. C:\Program Files (x86)\Steam\steamapps\common\UmamusumePrettyDerby\UmamusumePrettyDerby_Data\Persistent)");
+        Console.Write("Path: ");
+        string? customPath = Console.ReadLine();
+
+        if (string.IsNullOrEmpty(customPath))
+        {
+            Console.WriteLine("Error: No path entered. Please try again.");
+            Console.WriteLine();
+            continue;
+        }
+
+        if (SetCustomGameDataPath(customPath))
+        {
+            pathSet = true;
+            needsRegionPrompt = true; // Manual path - ask for region
+            Console.WriteLine($"Path set: {gameDataPath}");
+            Console.WriteLine();
+        }
+        else
+        {
+            Console.WriteLine("Please try again.");
+            Console.WriteLine();
+        }
+    }
+}
+else if (availablePaths.Count == 1)
+{
+    // Single installation - use it automatically
+    SetCustomGameDataPath(availablePaths[0].path);
+    needsRegionPrompt = availablePaths[0].needsRegionPrompt;
+    Console.WriteLine($"Found: {availablePaths[0].name}");
+    Console.WriteLine($"Path: {gameDataPath}");
+}
+else
+{
+    // Multiple installations - let user choose
+    Console.WriteLine("Multiple installations found:");
+    for (int i = 0; i < availablePaths.Count; i++)
+    {
+        Console.WriteLine($"{i + 1}: {availablePaths[i].name}");
+    }
+    Console.Write($"Select (1-{availablePaths.Count}): ");
+    
+    int selectedIndex = 0;
+    if (int.TryParse(Console.ReadLine(), out int choice) && choice >= 1 && choice <= availablePaths.Count)
+    {
+        selectedIndex = choice - 1;
+        Console.WriteLine($"Selected: {availablePaths[selectedIndex].name}");
+    }
+    else
+    {
+        Console.WriteLine($"Defaulting to: {availablePaths[0].name}");
+    }
+    SetCustomGameDataPath(availablePaths[selectedIndex].path);
+    needsRegionPrompt = availablePaths[selectedIndex].needsRegionPrompt;
+}
+
+// Verify database exists
 if (!File.Exists(metaPath))
 {
     Console.WriteLine($"Error: Database \"{metaPath}\" not found.");
@@ -20,40 +90,47 @@ if (!File.Exists(metaPath))
     Environment.Exit(0);
 }
 
-// Select region
-Console.WriteLine("Select your region:");
-Console.WriteLine("1: Japan (DMM)");
-Console.WriteLine("2: Global (Steam)");
-Console.Write("Select (1/2): ");
-var regionInput = Console.ReadLine();
-if (regionInput == "2")
+// Determine region
+if (needsRegionPrompt)
 {
-    region = Umamusume_Assets_Extractor.Region.Global;
-    Console.WriteLine("Global (Steam) mode selected.");
+    // Shared path - ask user
+    Console.WriteLine();
+    Console.WriteLine("This path is shared by Global Steam and Japan DMM. Select your region:");
+    Console.WriteLine("1: Global (Steam)");
+    Console.WriteLine("2: Japan (DMM)");
+    Console.Write("Select (1/2): ");
+    if (Console.ReadLine() == "1")
+    {
+        region = Umamusume_Assets_Extractor.Region.Global;
+        Console.WriteLine("Region: Global");
+    }
+    else
+    {
+        region = Umamusume_Assets_Extractor.Region.Jp;
+        Console.WriteLine("Region: Japan");
+    }
 }
 else
 {
+    // Japan Steam (only non-shared path) or new DMM path
     region = Umamusume_Assets_Extractor.Region.Jp;
-    Console.WriteLine("Japan (DMM) mode selected.");
+    Console.WriteLine("Region: Japan");
 }
 
-// Select mode (Global only: keys-only option)
-if (region == Umamusume_Assets_Extractor.Region.Global)
+// Select extraction mode (available for all regions now)
+Console.WriteLine();
+Console.WriteLine("Select extraction mode:");
+Console.WriteLine("1: Extract files (copies files + exports keys.json)");
+Console.WriteLine("2: Export keys only (fast - just creates keys.json)");
+Console.Write("Select (1/2): ");
+var modeInput = Console.ReadLine();
+if (modeInput == "2")
 {
+    ExportKeysOnly("keys.json");
     Console.WriteLine();
-    Console.WriteLine("Select extraction mode:");
-    Console.WriteLine("1: Extract files (copies files + exports keys.json)");
-    Console.WriteLine("2: Export keys only (fast - just creates keys.json)");
-    Console.Write("Select (1/2): ");
-    var modeInput = Console.ReadLine();
-    if (modeInput == "2")
-    {
-        ExportKeysOnly("keys.json");
-        Console.WriteLine();
-        Console.WriteLine("Press any key to exit...");
-        Console.ReadKey();
-        Environment.Exit(0);
-    }
+    Console.WriteLine("Press any key to exit...");
+    Console.ReadKey();
+    Environment.Exit(0);
 }
 
 // Verbose mode
